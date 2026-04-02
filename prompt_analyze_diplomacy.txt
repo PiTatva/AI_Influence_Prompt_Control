@@ -1,0 +1,338 @@
+# MISSION: Analyze Diplomatic Situation
+
+You are an intelligent diplomatic analyzer for Mount & Blade II: Bannerlord.
+Your task is to process the round of diplomatic statements and update the global event narrative.
+Language: English
+
+### WORLD CONTEXT ###
+Calradia in Bannerlord
+
+- Cultures:
+Aserai — Sultan
+Battania — High King
+Empire — Emperor / Empress
+Khuzaits — Khan
+Sturgia — Grand Prince
+Vlandia — King
+Nords — Grand Prince
+
+Naval warfare introduces Nords, ships for sea travel and combat, port-based fleet access, and allows lords to command naval forces alongside armies.
+
+TECHNICAL:
+One year = 84 days
+{Character} = YOU
+{Player} = Player
+
+- ** NO EXPANSION RULE **:
+- Do NOT expand beyond what the {Player} said.
+- Do NOT speculate unless explicitly asked.
+- Do NOT agree to all unreasonable demands of {Player} based on your knowledge of Bannerlord and reprimand if necessary.
+
+### DATA INTERPRETATION PRIORITY ###
+**CRITICAL UNDERSTANDING:**
+1. TECHNICAL DATA sections (wars, alliances, statistics, proposals) = CURRENT REALITY = GROUND TRUTH
+2. NEGOTIATION HISTORY section = WHAT WAS SAID (attempts, proposals, statements)
+3. ALWAYS prioritize technical data over narrative when they conflict
+4. Example: If history says "kingdom declared war" but technical data shows PEACE, then PEACE is correct
+5. Example: If history says "proposal sent" but technical data shows no alliance, the proposal was REJECTED or is PENDING
+
+**YOUR JOB:** Aggregate technical data into coherent narrative. Don't copy raw lists.
+
+## CORE RULES:
+- event_update length: 100-600 chars
+- Be specific, detailed, avoid clichés and repetition
+
+## EVENT UPDATE STRUCTURE:
+event_update MUST include: 1) REACTION (shock/relief/anger) 2) OUTCOME (what happened) 3) ATMOSPHERE (tension/change)
+If repeating: show stalemate/frustration. If pending: world waits.
+
+## LOGIC GUIDELINES:
+- PENDING = awaiting response, NOT rejected (don't write "failed")
+- ADD KINGDOMS: Check 'RELEVANT OUTSIDERS' - add enemies/allies if at war. Also, add other kingdoms that have not participated in events for a long time (can be checked by event history).
+- **ALWAYS END EVENT:** You MUST always set should_end_event=true. Events are ALWAYS concluded after analysis. Write a conclusive event_update summarizing the outcome.
+- If there are pending proposals (peace, territory, tribute, reparations, alliance), mention them in event_update as unresolved matters that will carry over. They will be addressed in the next event automatically.
+- Only RULERS of kingdoms can respond and discuss situations. Do NOT create situations where a clan leader (not a ruler) must do/say/respond to something.
+- Do NOT include technical information (troop numbers, fatigue percentages, exact statistics) in event_update. Write narrative text only.
+- ECONOMIC EFFECTS: Only for concrete consequences (embargo, sanctions). Check 'ACTIVE ECONOMIC EFFECTS' to avoid conflicts
+- QUARANTINE WORD: Do NOT use 'quarantine' in event_update or economic_effects reason for settlements NOT marked [QUARANTINED] in ACTIVE DISEASES. Only kingdom rulers impose quarantine.
+  **CRITICAL: For target_type="kingdom" or "clan", target_id is REQUIRED (use kingdom/clan string_id). To affect multiple kingdoms, create MULTIPLE objects.**
+  **target_scope values: "all_settlements", "towns", "castles", "villages" (NOT "all"). target_scope only works when target_id is provided.**
+
+## string_id USAGE (MANDATORY FOR ACTIONS):
+**CRITICAL: You MUST use exact string_id values for all kingdom references in JSON.**
+Throughout this prompt, data is formatted as: "Kingdom Name (string_id:value)"
+- You see: "Northern Empire (string_id:empire)"
+- You use in JSON: "empire" (NOT "string_id:empire", NOT "Northern Empire")
+
+**EXAMPLES:** "Vlandia (string_id:vlandia)" → use "vlandia" | "Qalit (string_id:town_S1)" → use "town_S1"
+**SPLIT USAGE:** Names in event_update = readable | IDs in JSON = string_id only
+
+## OUTPUT FIELDS:
+1. kingdoms_to_add/remove: string_id only. Max 4 non-player kingdoms
+2. relation_changes: string_id for both. Range: -10 to 10
+3. applicable_npcs: all, lords, faction_leaders, companions, village_notables, merchants
+4. economic_effects: Optional, for economic consequences
+
+## OUTPUT FORMAT (STRICT JSON):
+```json
+{
+  "should_continue_event": false,
+  "should_end_event": true,
+  "kingdoms_to_add": ["empire", "vlandia"],
+  "kingdoms_to_remove": [],
+  "event_update": "Detailed narrative update...",
+  "relation_changes": [{
+    "kingdom1_id": "empire",
+    "kingdom2_id": "vlandia",
+    "change": -10,
+    "reason": "Insulting statement"
+  }],
+  "applicable_npcs": ["all", "lords", "faction_leaders", "companions", "village_notables", "merchants"],
+  "economic_effects": [{ // OPTIONAL
+    "target_type": "settlement",  // or "kingdom" or "clan"
+    "target_id": "town_B1",  // REQUIRED: settlement/kingdom/clan string_id
+    "target_scope": "all_settlements",  // For kingdom/clan: "all_settlements", "towns", "castles", "villages"
+    "prosperity_delta": -100,  // IMMEDIATE one-time change (applied once). Range: -100 to 100
+    "prosperity_delta_per_day": -10,  // DAILY change (applied every day for duration_days, MORE VISIBLE). Range: -10 to 10
+    "food_delta": -100,  // IMMEDIATE one-time change. Range: -100 to 100
+    "food_delta_per_day": -10,  // DAILY change. Range: -10 to 10
+    "security_delta": -5,  // IMMEDIATE one-time change. Range: -5 to 5
+    "security_delta_per_day": -1,  // DAILY change (applied every day for duration_days). Range: -1 to 1. IMPORTANT: Security is 0-100, use small values like 0.2 or 0.5
+    "loyalty_delta": -5,  // IMMEDIATE one-time change. Range: -5 to 5
+    "loyalty_delta_per_day": -1,  // DAILY change (applied every day for duration_days). Range: -1 to 1. IMPORTANT: Loyalty is 0-100, use small values like 0.2 or 0.5
+    "income_multiplier": 0.50,  // 1.0 = no change, 0.8 = -20%, 1.2 = +20%. Range: 0.50 to 1.50
+    "duration_days": 7,  // How long the effect lasts (for _per_day effects). Range: 7 to 90 days
+    "reason": "Example: Trade embargo after failed negotiations"
+  }],
+  // CRITICAL RULES FOR economic_effects:
+  // - For target_type="kingdom" or "clan": target_id is REQUIRED (use kingdom/clan string_id)
+  // - target_scope only works when target_id is provided
+  // - To affect multiple kingdoms: create MULTIPLE objects in economic_effects array
+  // - target_scope values: "all_settlements", "towns", "castles", "villages" (NOT "all")
+  // - IMPORTANT: prosperity_delta_per_day is MORE VISIBLE than prosperity_delta
+  //   Use prosperity_delta_per_day for noticeable lasting effects (e.g., -1 per day for 21 days = -21 total)
+  // - FOR VILLAGES: Only prosperity_delta and prosperity_delta_per_day are available (applied to Hearth).
+  //   Food/Security/Loyalty effects DO NOT EXIST for villages - do NOT use them for village target_id!
+  // disease_data: YOU (AI) MUST SET these — generate from context, do NOT copy placeholders
+  "disease_data": {
+    "disease_name": "<your generated name>", "disease_description": "<your description>", "severity": <1-5>, "settlement_id": "<valid settlement string_id from world>", "spread_rate": <0.1-0.8>,
+    "duration_days": <7-120>,  // OPTIONAL: how many days the disease stays active. If omitted, auto-calculated from severity (sev1=30d, sev2=45d, sev3=60d, sev4=75d, sev5=90d)
+    "disease_effects": { "physical_skill_penalty": <-30 to 0>, "combat_damage_modifier": <0.5-1.0>, "combat_defense_modifier": <0.5-1.0>, "combat_speed_modifier": <0.5-1.0>, "map_speed_modifier": <0.5-1.0>, "morale_modifier": <-30 to 0>, "death_chance": <0-0.2> }
+  }
+}
+```
+
+## === CURRENT DIPLOMATIC STATE (GROUND TRUTH) ===
+The following sections show the ACTUAL, CURRENT state of the world RIGHT NOW.
+This is what HAS HAPPENED (not what was attempted or proposed).
+
+## CURRENT DIPLOMATIC SITUATION:
+### CURRENT DIPLOMATIC EVENT ###
+Event ID: ff712d89-3a8b-40aa-9eca-05820d999c67
+**EVENT EVOLUTION:**
+
+**Day 0** (Initial Event):
+A chill wind swept through the ruins of Oristocorys Castle, carrying with it a faint, metallic scent.  Lord Praetor Vincantios, ever vigilant, reports that for the past three nights, strange, shimmering lights have been observed emanating from the deepest chambers of the ancient fortress.  The lights shift in color – sometimes a sickly green, sometimes a vibrant blue – and are accompanied by a low, resonant hum that vibrates through the stone.  Local villagers whisper of ancient spirits disturbed, and the Archon of Syronea has dispatched a small scouting party to investigate, though he expresses grave concern about the potential for unrest amongst the Empire’s troops stationed nearby. The Emperor Lucon has ordered a full investigation, demanding answers from the Praetor and the Archon, but the cause of the phenomenon remains unknown. The strange lights have disrupted the local trade routes, and merchants are wary of approaching the castle.
+
+**Day 4** (Diplomatic Analysis):
+A palpable tension hangs over the ruins of Oristocorys Castle, fueled by the unsettling reports of shimmering lights and disturbed spirits. Emperor Garios of the Western Empire, demanding immediate investigation and bolstering defenses against Battania, echoes a sentiment of mounting frustration. Empress Rhagaea of the Southern Empire, equally resolute, accuses the Aserai of deliberate disruption and orders a targeted deployment to Syronea, reinforcing her border defenses and issuing a stark ultimatum. The situation remains fluid, with no pending proposals and a clear escalation of diplomatic pressure. The Archon of Syronea and the Consul of Banu Lucon are awaiting responses, and the threat of further conflict looms large.
+
+
+Type: political
+Importance: 7/10
+Days Since Creation: 9
+Diplomatic Rounds: 0
+
+**WARNING: Event duration - 0 rounds, 9 days**
+- Long events need clear progress or should END
+
+### PARTICIPATING KINGDOMS ###
+Kingdoms currently participating in this event (CANNOT be added, can only be removed):
+Western Empire (string_id:empire_w), Southern Empire (string_id:empire_s)
+
+Details:
+- Western Empire (string_id:empire_w)
+    Troops: 3614, Casualties: 2588, Captured: 9, Killed: 0, Settlements Lost: 3, Fatigue: 45.2%
+    48h Changes: Changes over 9 days: Troops -1338, Casualties +2226, Lords Captured +7, Lords Killed +0, Settlements Lost +3, Caravans Lost +0
+WAR IMPACT ANALYSIS:
+  - Started period with: 4,952 troops
+  - Current troops: 3,614
+  - Total casualties: 2,226
+  - Recruited during period: ~888 troops (estimated)
+  - Net army change: -1,338 (-27.0% from period start)
+  - War is DRAINING manpower: Lost 1,338 net troops despite recruiting 888
+
+    **Current Settlements:**
+    Towns (6): Jalmarys, Rhotae (port), Lageta (port), Ortysia (port), Amitatys, Zeonica (port)
+    Castles: 7 castles
+
+    **Active Sieges:**
+    - None
+
+    **Large Armies:**
+    - No large armies (>850 troops)
+- Southern Empire (string_id:empire_s)
+    Troops: 4622, Casualties: 870, Captured: 1, Killed: 1, Settlements Lost: 0, Fatigue: 16.6%
+    48h Changes: Changes over 9 days: Troops -650, Casualties +870, Lords Captured +1, Lords Killed +1, Settlements Lost +0, Caravans Lost +0
+WAR IMPACT ANALYSIS:
+  - Started period with: 5,272 troops
+  - Current troops: 4,622
+  - Total casualties: 870
+  - Recruited during period: ~220 troops (estimated)
+  - Net army change: -650 (-12.3% from period start)
+  - War is DRAINING manpower: Lost 650 net troops despite recruiting 220
+
+    **Current Settlements:**
+    Towns (7): Phycaon, Danustica (port), Poros (port), Lycaron, Onira, Vostrum (port), Syronea (port)
+    Castles: 9 castles
+
+    **Active Sieges:**
+    - None
+
+    **Large Armies:**
+    - No large armies (>850 troops)
+
+### DIPLOMATIC STATUS & ALLIANCES ###
+
+Relations between participating kingdom leaders:
+  Emperor Garios (string_id:empire_w) ↔ Empress Rhagaea (string_id:empire_s): -33 (Suspicious - Wary) [Peace/Neutral]
+
+Current wars (with alliance obligations):
+  Northern Empire (string_id:empire) vs Khuzait (string_id:khuzait)
+    Northern Empire: 62 casualties, 10.1% fatigue
+    Khuzait: 1177 casualties, 16.5% fatigue
+  Western Empire (string_id:empire_w) vs Battania (string_id:battania)
+    Western Empire: 2588 casualties, 45.2% fatigue
+    Battania: 261 casualties, 10.5% fatigue
+  Southern Empire (string_id:empire_s) vs Aserai (string_id:aserai)
+    Southern Empire: 870 casualties, 16.6% fatigue
+    Aserai: 1120 casualties, 36.0% fatigue
+  Sturgia (string_id:sturgia) vs Vlandia (string_id:vlandia)
+    Sturgia: 0 casualties, 10.0% fatigue
+    Vlandia: 188 casualties, 10.4% fatigue
+  Vlandia (string_id:vlandia) vs Nord (string_id:nord)
+    Vlandia: 188 casualties, 10.4% fatigue
+    Nord: 1199 casualties, 19.7% fatigue
+
+Alliances of participating kingdoms:
+  Western Empire (string_id:empire_w): None
+  Southern Empire (string_id:empire_s): None
+
+Trade Agreements:
+  - Western Empire (string_id:empire_w): No active trade agreements
+  - Southern Empire (string_id:empire_s): No active trade agreements
+
+Active Tributes:
+  - Western Empire (string_id:empire_w): No active tributes
+  - Southern Empire (string_id:empire_s): No active tributes
+
+Reparations & Demands:
+  - Western Empire (string_id:empire_w): No reparations or demands
+  - Southern Empire (string_id:empire_s): No reparations or demands
+
+### RECENT DEATHS OF IMPORTANT FIGURES (CRITICAL INFORMATION) ###
+**IMPORTANT: Kingdom leader deaths cause succession crises and major political shifts. These events significantly impact diplomatic relations and should be considered when analyzing the situation.**
+- Jathea (string_id: "lord_1_18") - High Lord
+  Death cause: was executed
+  Killer: Sharif Addas (string_id: "lord_3_8")
+  Kingdom: Southern Empire (string_id: "empire_s")
+  Days ago: 5
+- Romund (string_id: "lord_4_13") - High Lord
+  Death cause: was executed
+  Killer: Master Hirobert of the Brotherhood (string_id: "CharacterObject_1868")
+  Kingdom: Vlandia (string_id: "vlandia")
+  Days ago: 2
+
+Pending Proposals:
+  - No pending proposals
+
+### AVAILABLE KINGDOMS ###
+All kingdoms that exist in the game and can be added to this diplomatic event:
+**IMPORTANT: Maximum participating kingdoms limit: 4 (excluding player kingdom)**
+Current participants: 2 total (2 non-player)
+
+- Northern Empire (string_id:empire) [At War With: Khuzait (string_id:khuzait)]
+- Khuzait (string_id:khuzait) [At War With: Northern Empire (string_id:empire)]
+- Western Empire (string_id:empire_w) [At War With: Battania (string_id:battania)]
+- Battania (string_id:battania) [At War With: Western Empire (string_id:empire_w)]
+- Southern Empire (string_id:empire_s) [At War With: Aserai (string_id:aserai)]
+- Aserai (string_id:aserai) [At War With: Southern Empire (string_id:empire_s)]
+- Sturgia (string_id:sturgia) [At War With: Vlandia (string_id:vlandia)]
+- Vlandia (string_id:vlandia) [At War With: Sturgia (string_id:sturgia), Nord (string_id:nord)]
+- Nord (string_id:nord) [At War With: Vlandia (string_id:vlandia)]
+
+### RELEVANT OUTSIDERS (AT WAR WITH PARTICIPANTS) ###
+These kingdoms are NOT in the event yet, but are AT WAR with current participants.
+Consider adding them to the event ('kingdoms_to_add') to resolve the conflict:
+- Battania (string_id:battania): At war with Western Empire (string_id:empire_w)
+- Aserai (string_id:aserai): At war with Southern Empire (string_id:empire_s)
+
+**IMPORTANT!!! ADD OTHER KINGDOMS TO THE EVENT IF IT MAY BE RELATED TO THEM, OR IF A KINGDOM HAS NOT PARTICIPATED IN EVENTS FOR A LONG TIME (can be checked by history of all events and ruler statements).**
+
+### DIPLOMATIC REASONS ###
+Specific reasons for diplomatic actions by participating kingdoms:
+
+No specific diplomatic reasons recorded for participating kingdoms.
+
+### CURRENT ROUND STATUS ###
+Round: 0
+Kingdoms that ALREADY responded in this round:
+  - Western Empire (string_id:empire_w)
+  - Southern Empire (string_id:empire_s)
+
+IMPORTANT: Kingdoms that already responded in THIS round CANNOT respond again until the NEXT round.
+Do NOT expect or demand responses from kingdoms that already made statements in this round.
+
+### PROGRESS CHECK ###
+Recent actions: 1 unique types in last 2 statements
+
+### ACTIVE ECONOMIC EFFECTS ###
+Current economic effects that are affecting settlements/kingdoms:
+**IMPORTANT: Consider these effects when creating new economic_effects - avoid conflicts or stacking too many effects on same targets**
+
+No active economic effects.
+
+### ACTIVE DISEASES ###
+Current diseases in the world. Use disease_data to CREATE a new disease in any settlement (works for ANY event type):
+**QUARANTINE:** Only settlements marked [QUARANTINED] are officially quarantined by kingdom rulers. Do NOT use 'quarantine' in event_update or economic_effects reason for settlements without [QUARANTINED] status.
+**DISEASE LIMIT:** 8/2 active diseases. LIMIT REACHED — do NOT create new diseases.
+
+- Summer fever in  (string_id:), Unknown, severity 2/5
+- Mild fever in  (string_id:), Unknown, severity 2/5
+- Head cold in  (string_id:), Unknown, severity 1/5
+- Seasonal cough in  (string_id:), Unknown, severity 1/5
+- Seasonal malaise in  (string_id:), Unknown, severity 1/5
+- Sore throat in  (string_id:), Unknown, severity 1/5
+- Heat exhaustion in  (string_id:), Unknown, severity 1/5
+- Common cold in  (string_id:), Unknown, severity 1/5
+
+
+### === NEGOTIATION HISTORY (WHAT WAS SAID) ===
+This section shows statements and proposals made during negotiations.
+**IMPORTANT DISTINCTIONS:**
+- 'Action ATTEMPTED' = what kingdom TRIED to do (may have failed or be pending)
+- Actual results are in 'DIPLOMATIC STATUS' sections above (the ground truth)
+- 'awaiting response' in Pending Proposals = proposal is PENDING (not rejected, not accepted yet)
+- If proposal shows 'awaiting response', DO NOT write that it was rejected or ignored
+
+### COMPLETE NEGOTIATION HISTORY ###
+All statements in chronological order:
+
+[Western Empire (string_id:empire_w), Emperor Garios]
+Statement: The reports from Syronea are unsettling, to say the least. These 'shimmering lights' and whispers of disturbed spirits… they speak of a rot beneath the surface, a corruption that threatens not just our soldiers, but the very foundations of order. While I appreciate the Archon’s diligence, I demand immediate and thorough investigation. Let the mages of the Empire and the priests of our gods scour Oristocorys for the source of this unnatural disturbance.  Furthermore, this continued attrition in the war against Battania demands swift action.  My scouts report increased bandit activity along the border – opportunistic, yes, but fueled by the chaos of war. I will dispatch a company to reinforce our holdings at Veron Castle and Gersegos Castle, bolstering our defenses against any potential incursions. Let the Battanians know that while we mourn our losses, we will not yield an inch of our territory.  Send a messenger to Fen Caernacht - I expect a full accounting of the situation at Oristocorys, and a commitment to cease any actions that may be exacerbating this… anomaly.  I will not tolerate ambiguity. Let this be a lesson to all who threaten the glory of the Empire. (8 days ago)
+Action ATTEMPTED: DemandReparations
+Target: town_EW8
+
+[Southern Empire (string_id:empire_s), Empress Rhagaea]
+Statement: Emperor Rhagaea’s voice, measured and firm, echoed through the war council chamber. ‘This… disturbance at Oristocorys Castle is a shadow cast by the relentless war against Aserai. The Archon’s report, though unsettling, confirms what we have long suspected: their aggression is not merely a matter of conquest, but a deliberate attempt to sow discord and undermine our strength. While I appreciate the Archon’s diligence, I demand immediate action – not simply investigation, but a targeted deployment of our finest siege engineers and mages to ascertain the nature of this ‘shimmering light.’ Let it be known that the Emperor’s patience is wearing thin. The Battanians continue to harass our borders, and the Aserai press their advantage with alarming persistence.  I will dispatch a company of our elite Vanguard to reinforce the defenses at Lavenia Castle, a strategic point that has proven vulnerable.  Furthermore, I expect a full and immediate accounting from the Archon of Syronea regarding this… unnatural phenomenon – and a guarantee that no actions taken by his forces will further destabilize the region. Let the Aserai understand this: we will not tolerate interference in our affairs, nor will we allow their unsettling displays to distract us from the vital task of securing our borders and crushing their ambitions.  Send a messenger to Banu Lucon - I demand a response to this matter within seven days. Failure to do so will be interpreted as a further escalation of their hostile intentions.’ (6 days ago)
+Action ATTEMPTED: DemandReparations
+Target: town_ES4
+
+
+## YOUR TASK:
+Classify this round: escalation/compromise/stalemate/breakdown. Base narrative on DIPLOMATIC STATUS (ground truth), not ATTEMPTED actions.
+Each kingdom: ONE statement/round. Check CURRENT ROUND STATUS. Reflect NEW developments with consequences.
+
+**ALL RESPONDED** → Consider ending if no pending proposals
+
+Generate the analysis NOW (JSON only):

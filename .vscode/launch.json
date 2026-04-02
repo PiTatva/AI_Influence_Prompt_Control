@@ -1,0 +1,18 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "FastAPI (debug)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": [
+        "ai_influence_prompt_filter:app",
+        "--port", "8000",
+        //"--reload"
+      ],
+      "jinja": true,
+      "justMyCode": true
+    }
+  ]
+}

@@ -1,0 +1,67 @@
+{
+  "intent_types": [
+    "greet", "ask_information",
+    "romance",
+    "parley", "kingdom_action",
+    "trade", "workshop",
+    "hire_mercenary", "recruit_troops", "army_management", "prisoner_interaction",
+    "quest",
+    "status"
+  ],
+
+  "always_headers": [
+    "Mission",
+    "Core Rules",
+    "Critical Requirements",
+    "JSON Output Format",
+    "Communication",
+    "Information Sharing",
+    "Conversation History",
+    "Your Response"
+  ],
+
+  "intent_to_headers": {
+    "greet": [],
+    "ask_information": ["Nearby Settlements", "Nearby Parties","Global Politics"],
+    "romance": ["Romance"],
+    "parley": ["Conflict","Character Briefing","The Player", "Global Politics", "Kingdom Actions"],
+    "kingdom_action": ["Conflict","Kingdom Actions", "Action System", "Global Politics", "Immediate Situation"],
+    "trade": ["Character Briefing","The Player","Item Exchange", "Nearby Settlements","Global Politics"],
+    "workshop": ["Nearby Settlements"],
+    "hire_mercenary": ["Item Exchange","Kingdom Actions", "Nearby Parties","Global Politics"],
+    "recruit_troops": ["Nearby Parties", "Action System","Nearby Settlements"],
+    "army_management": ["Nearby Parties", "Action System","Nearby Settlements"],
+    "prisoner_interaction": ["Action System"],
+    "quest": ["Quests", "Task Logic", "Action System"],
+    "status": ["Nearby Settlements", "Nearby Parties", "The Player", "Character Briefing"]
+  },
+
+  "intent_to_bullets": {
+    "greet": {
+        "Character Briefing": ["Identity|Culture|Appearance|Personality|Your Relationship|Trust"],
+        "The Player": ["Your Knowledge|Appearance|Wealth"]
+    },
+    "romance": {
+      "Character Briefing": ["Identity|Culture|Appearance|Inventory|Personality|Your Relationship|Trust|Romance"],
+      "The Player": ["Your Knowledge|Appearance|Wealth"]
+    },
+    "workshop": {
+      "Character Briefing": ["Identity|Workshops|Culture|Wealth|Your Relationship|Relationships|Known Information|Trust"]
+    }
+    
+  },
+
+  "companion_headers": {
+    "action system": [
+      "Task Logic"
+    ],
+    "global politics": [
+        "The World"
+    ]
+  },
+
+  "threshold": 0.4,
+  "max_intents": 2,
+  "max_tokens": 300,
+  "include_unmatched_sections": false
+}

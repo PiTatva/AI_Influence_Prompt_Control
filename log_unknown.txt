@@ -1,0 +1,13 @@
+[Warning] No mission keywords found; rules reset to defaults (pass-through mode).
+[KV-cache] session_key='mistral-c'  static_hash=185f8db32271fe25
+[KV-cache] static_prompt=5 chars  dynamic_prompt=0 chars
+[KV-cache] known prefixes: ['test-session-1:2a8eb13817b14ca5']
+[KV-cache] MISS — warming new prefix combination ('mistral-c:185f8db32271fe25')
+[KV-cache] warm response — context tokens returned: 79
+[Prompt] Received from mod: 5 chars
+[KV-cache] Sending dynamic-only prompt (0 chars) with context prefix
+[Prompt] After processing → sending to Ollama: 5 chars , + cached static context)
+[Ollama Response] 
+Hello
+------------
+
