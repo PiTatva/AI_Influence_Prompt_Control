@@ -36,6 +36,17 @@ DEFAULT_MODEL = "mistral"
 TOTAL_BUDGET  = 60000   # hard character cap on the final combined prompt
 LOGGING       = True    # write diagnostic logs to log_{mission}.txt
 
+# ── Backend configuration ──────────────────────────────────────────────────
+# Set BACKEND to "ollama" or "player2" to choose the AI provider.
+BACKEND = "ollama"
+
+# Player2 settings (used when BACKEND = "player2")
+# Base URL of the local Player2 App API (must be running).
+PLAYER2_BASE_URL = "http://127.0.0.1:4315"
+# Game Client Id from https://player2.game/profile/developer
+# Leave empty ("") to omit the auth header (Player2 App still validates via its own login).
+PLAYER2_GAME_KEY = ""
+
 
 # Config lives in intent_config.json  (intent types, headers, bullets, thresholds)
 # ENABLE_INTENT_SYSTEM is loaded from each config_*.py file via _apply_rules().
@@ -500,12 +511,27 @@ async def summarize_section(
     if extra_instructions:
         summarize_prompt += f"\n{extra_instructions}"
 
-    payload = {"model": model, "prompt": summarize_prompt, "stream": False}
-
     try:
-        resp = await client.post(OLLAMA_URL, json=payload, timeout=90.0)
-        resp.raise_for_status()
-        summary = resp.json().get("response", "").strip()
+        if BACKEND == "player2":
+            p2_headers = {"player2-game-key": PLAYER2_GAME_KEY} if PLAYER2_GAME_KEY else {}
+            p2_payload = {
+                "messages": [{"role": "user", "content": summarize_prompt}],
+                "stream": False,
+            }
+            resp = await client.post(
+                f"{PLAYER2_BASE_URL}/v1/chat/completions",
+                json=p2_payload,
+                headers=p2_headers,
+                timeout=90.0,
+            )
+            resp.raise_for_status()
+            choices = resp.json().get("choices", [])
+            summary = choices[0]["message"]["content"].strip() if choices else ""
+        else:
+            payload = {"model": model, "prompt": summarize_prompt, "stream": False}
+            resp = await client.post(OLLAMA_URL, json=payload, timeout=90.0)
+            resp.raise_for_status()
+            summary = resp.json().get("response", "").strip()
         if summary:
             return summary[:max_chars]
     except Exception:
@@ -650,7 +676,13 @@ OLLAMA_BASE_URL = "http://localhost:11434"
 
 @app.get("/api/tags")
 async def tags():
-    """Proxy Ollama's /api/tags so mods can verify connectivity against this proxy."""
+    """Proxy backend connectivity check (Ollama /api/tags or Player2 /health)."""
+    if BACKEND == "player2":
+        p2_headers = {"player2-game-key": PLAYER2_GAME_KEY} if PLAYER2_GAME_KEY else {}
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(f"{PLAYER2_BASE_URL}/health", headers=p2_headers, timeout=10.0)
+            resp.raise_for_status()
+        return {"models": [{"name": "player2", "model": "player2"}]}
     async with httpx.AsyncClient() as client:
         resp = await client.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=10.0)
         resp.raise_for_status()
@@ -751,6 +783,52 @@ async def _run_pipeline(
     _log(f"[KV-cache] static_prompt={len(static_prompt)} chars  dynamic_prompt={len(dynamic_prompt)} chars")
     _log(f"[KV-cache] known prefixes: {list(_static_ctx_cache.keys())}")
 
+    _log(f"[Prompt] Received from mod: {len(original_prompt)} chars")
+
+    if BACKEND == "player2":
+        # ── Player2 chat/completions path (no KV-cache) ───────────────────
+        _log(f"[Player2] static={len(static_prompt)} chars  dynamic={len(dynamic_prompt)} chars")
+        p2_headers = {"player2-game-key": PLAYER2_GAME_KEY} if PLAYER2_GAME_KEY else {}
+        p2_payload: dict = {
+            "messages": [
+                {"role": "system", "content": static_prompt},
+                {"role": "user",   "content": dynamic_prompt},
+            ],
+            "stream": False,
+        }
+        if "temperature" in forward_data:
+            p2_payload["temperature"] = forward_data["temperature"]
+        if "max_tokens" in forward_data:
+            p2_payload["max_tokens"] = forward_data["max_tokens"]
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{PLAYER2_BASE_URL}/v1/chat/completions",
+                json=p2_payload,
+                headers=p2_headers,
+                timeout=120.0,
+            )
+            resp.raise_for_status()
+        p2_resp = resp.json()
+        choices = p2_resp.get("choices", [])
+        response_text = choices[0]["message"]["content"] if choices else ""
+        _log(f"[Player2 Response] {response_text}")
+        _log(f"{static_prompt}\n------------\n{dynamic_prompt}")
+        _flush_log()
+        usage = p2_resp.get("usage", {})
+        return {
+            "model":             p2_resp.get("model", model),
+            "created_at":        "",
+            "response":          response_text,
+            "done":              True,
+            "done_reason":       "stop",
+            "prompt_eval_count": usage.get("prompt_tokens", 0),
+            "eval_count":        usage.get("completion_tokens", 0),
+            "total_duration":    0,
+            "load_duration":     0,
+            "eval_duration":     0,
+        }
+
+    # ── Ollama path (with KV-cache) ────────────────────────────────────────
     async with httpx.AsyncClient() as client:
         if cache_key not in _static_ctx_cache:
             _log(f"[KV-cache] MISS — warming new prefix combination ({cache_key!r})")
@@ -773,7 +851,6 @@ async def _run_pipeline(
         forward_data["keep_alive"] = -1
         forward_data["stream"]     = False
 
-        _log(f"[Prompt] Received from mod: {len(original_prompt)} chars")
         if static_context:
             _log(f"[KV-cache] Sending dynamic-only prompt ({len(dynamic_prompt)} chars) with context prefix")
             forward_data["prompt"]  = dynamic_prompt

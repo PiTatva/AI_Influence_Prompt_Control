@@ -1,8 +1,8 @@
 # AI Influence Prompt Filter
 
-A local FastAPI proxy that sits between the **AI Influence** mod for **Mount & Blade II: Bannerlord** and your local **Ollama** instance.
+A local FastAPI proxy that sits between the **AI Influence** mod for **Mount & Blade II: Bannerlord** and your local AI backend — either **Ollama** or the **Player2 App**.
 
-Instead of forwarding the mod's raw prompts directly to Ollama, this script intercepts each request, parses the structured markdown prompt the mod generates, and applies a set of configurable rules before forwarding the trimmed prompt onward. This keeps prompts lean, reduces token usage, and lets you fine-tune AI behavior per mission type without touching the mod itself.
+Instead of forwarding the mod's raw prompts directly to the AI backend, this script intercepts each request, parses the structured markdown prompt the mod generates, and applies a set of configurable rules before forwarding the trimmed prompt onward. This keeps prompts lean, reduces token usage, and lets you fine-tune AI behavior per mission type without touching the mod itself.
 
 **What it can do:**
 
@@ -18,7 +18,9 @@ Instead of forwarding the mod's raw prompts directly to Ollama, this script inte
 ## Requirements
 
 - Python 3.10+
-- [Ollama](https://ollama.com) running locally
+- **One of:**
+  - [Ollama](https://ollama.com) running locally *(default)*
+  - [Player2 App](https://player2.game) running locally
 - The **AI Influence** Bannerlord mod installed
 
 ---
@@ -42,12 +44,11 @@ Instead of forwarding the mod's raw prompts directly to Ollama, this script inte
    ```bash
    uvicorn ai_influence_prompt_filter:app --host 0.0.0.0 --port 8000
    ```
-   The proxy will now listen on `http://localhost:8000` and forward processed prompts to Ollama at `http://localhost:11434`.
+   The proxy will now listen on `http://localhost:8000` and forward processed prompts to your configured backend.
 
-5. Make sure **Ollama is running** with your desired model loaded, e.g.:
-   ```bash
-   ollama run mistral
-   ```
+5. Make sure your **AI backend is running**:
+   - **Ollama** (default): `ollama run mistral`
+   - **Player2**: launch the Player2 App and sign in before starting the proxy.
 
 ---
 
@@ -60,13 +61,41 @@ In-game, open the **Mod Configuration Menu (MCM)** and find the **AI Influence**
 | **API URL / Endpoint** | `http://localhost:8000/api/generate` |
 | **Model** | Your Ollama model name (e.g. `mistral`) |
 
-> **Note:** The proxy passes the model name through to Ollama, so whatever model is set in MCM will be used. The default in the script is `mistral` — change `DEFAULT_MODEL` in `ai_influence_prompt_filter.py` if you want a different fallback.
+> **Note:** The proxy passes the model name through to the backend. The default in the script is `mistral` — change `DEFAULT_MODEL` in `ai_influence_prompt_filter.py` if you want a different fallback. When using Player2 the model selection is controlled by the Player2 App itself, so the MCM model field is ignored.
 
 Once set, every AI request from the mod will go through the filter automatically. No other changes to the mod are needed.
 
 ---
 
-## Configuration
+## Backend Configuration
+
+Open `ai_influence_prompt_filter.py` and set the `BACKEND` variable near the top:
+
+```python
+# "ollama" (default) or "player2"
+BACKEND = "ollama"
+```
+
+### Ollama (default)
+
+No extra settings required. The proxy connects to `http://localhost:11434` and uses the KV-cache warm-up pipeline.
+
+### Player2
+
+```python
+BACKEND          = "player2"
+PLAYER2_BASE_URL = "http://127.0.0.1:4315"   # Player2 App must be running
+PLAYER2_GAME_KEY = "your-game-client-id"      # from player2.game/profile/developer
+```
+
+- The Player2 App must be running and you must be signed in before starting the proxy.
+- `PLAYER2_GAME_KEY` is your **Game Client Id** from the [Developer Dashboard](https://player2.game/profile/developer). You can leave it empty (`""`) while developing.
+- Summarization calls and main generation both go through `POST /v1/chat/completions`.
+- KV-cache warm-up is **not** used with Player2 (the App manages its own caching).
+
+---
+
+## Mission Config Files
 
 Each mission type maps to a config file you can edit freely:
 
