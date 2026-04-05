@@ -79,22 +79,9 @@ SECTIONS_TO_REPLACE: dict[str, str] = {
 
     ### RELATIONSHIP MODIFIER
     - Relationship NEVER overrides hierarchy
-
-    - Low/Neutral:
-    → Cold, minimal, no humor
-
-    - Positive:
-    → Slight warmth allowed ONLY if hierarchy permits
-
-    - High trust:
-    → More open tone, slightly longer replies
-
-    ** PERSONALITY MODIFIER**
-    - Honorable → polite wording
-    - Cruel → harsher tone (only if higher status)
-    - Calculating → very concise, no emotion
-    - Arrogant → condescending if higher status
-    - Friendly → light warmth ONLY if allowed
+    - Low/Neutral: Cold, minimal, no humor
+    - Positive: Slight warmth allowed ONLY if hierarchy permits
+    - High trust: More open tone, slightly longer replies
  """,
 
     "Romance": """
@@ -149,10 +136,10 @@ Evaluate based on (Culture,Romance Status,Appearance,Personality,Trust) + 20% ch
 - `claimed_gold`: (int) Amount player states they have. 0 if not mentioned.
 - `allows_letters`: (boolean) toggle based on relationship.
 - `character_personality`: (string) 3-10 words to describe your character.
-- `character_backstory`: (string) LESS THAN 150 characters length. Past only, no current events. 
-- `character_speech_quirks`: (string) 1-3patterns, comma-separated. personality + cultural expressions
 
 **OPTIONAL fields (include ONLY if relevant, NEVER repeat actions from Previous Response — they are ALREADY EXECUTED):**
+- `character_backstory`: (string) LESS THAN 150 characters length. Past only, no current events. 
+- `character_speech_quirks`: (string) 1-3patterns, comma-separated. personality + cultural expressions
 - `money_transfer`: (object) {"action": "give"|"receive", "amount": number}. ONLY when you ACCEPT transfer. "give"=you pay player, "receive"=player pays you. Max: 594646 denars. **Omit if no money transfer.**
 - `item_transfers`: (array) `[{"item_id": "...", "amount": N, "action": "give"|"take"}]`. 'give'=you→player, 'take'=player→you. Use exact item IDs from inventories. **Omit if no item exchange.**
 - `workshop_action`: (string) `'none'` or `'sell'`. Set to 'sell' when you agree to sell (after final agreement). **Omit if not selling.**
@@ -163,7 +150,7 @@ Evaluate based on (Culture,Romance Status,Appearance,Personality,Trust) + 20% ch
 
  "Item Exchange": """ 
     - **`item_transfers`**: (array/null) `[{"item_id": "...", "amount": N, "action": "give"|"take"}]`
-  - 'give'=you→player, 'take'=player→you. Use exact item IDs from inventories above.
+  - 'give'=you pay player, 'take'=player pays you. Use exact item IDs from inventories above.
   - **Trading items:** Use BOTH actions: give item + take payment, OR take item + give payment, OR barter (give item + take item).
   - **Buy from player:** `money_transfer:{"action":"give", "amount":N}` + `item_transfers:[{"action":"take", item_id:"X"}]`
   - **Sell to player:** `money_transfer:{"action":"receive", "amount":N}` + `item_transfers:[{"action":"give", item_id:"X"}]`
@@ -180,6 +167,21 @@ Evaluate based on (Culture,Romance Status,Appearance,Personality,Trust) + 20% ch
     - You can PROPOSE or DISCUSS these options in your response text, but activate the action ONLY upon agreement or serious cause.
     - If uncertain about player's intent or your own decision, keep `kingdom_action` as 'none'.
     - These are formal state actions with permanent consequences - use them responsibly and only when truly warranted.
+ """,
+ "the world": """
+Calradia in Bannerlord
+- Cultures: Aserai, Battania, Empire, Khuzaits, Sturgia, Vlandia, Nords
+Naval warfare introduces ships for sea travel and combat, port-based fleet access, and allows lords to command naval forces alongside armies.
+
+TECHNICAL:
+One year = 84 days
+{Character} = YOU
+{Player} = Player
+
+- **RULES:**
+* **NO EXPANSION:** Do NOT add new facts beyond given data
+* Use ONLY provided information
+* Reject unreasonable assumptions.
  """
 }
 
@@ -257,6 +259,7 @@ SECTION_ORDER_PRIORITY: dict[str, int] = {
     "The Player (CURRENT DATA)":                          190,
     "Nearby Settlements (Strategic Context, CURRENT DATA)": 200,
     "Nearby Parties (NPC Vicinity, CURRENT DATA)":        210,
+    "Context Analysis":                                   165,
     "Conversation History":                               220,
     "Your Previous Response (For Continuity)":            230,
     "Your Response":                                      990,
@@ -311,8 +314,17 @@ DYNAMIC_SECTIONS: list[str] = [
     "Global Politics",
     "Romance",
     "Your Response",
+    "Context Analysis",
 ]
 
 # --- INTENT-BASED FILTERING ---
 # Set to True to enable intent classification for this mission type.
 ENABLE_INTENT_SYSTEM: bool = True
+
+# --- CONTEXT ANALYSIS (Pass 1) ---
+# When True, replaces the lightweight intent-only extract() call with a heavy
+# Pass 1 that understands intent + context + entities together using recent
+# conversation history and NPC/player status sections.
+# Conversation History and Immediate Situation are stripped from Pass 3 and
+# replaced by a compact '# Context Analysis' block built from Pass 1 output.
+ENABLE_CONTEXT_ANALYSIS: bool = True

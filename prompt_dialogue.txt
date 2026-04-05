@@ -281,6 +281,7 @@ Player: Bro, you cannot barter items from village's inventory. I think you can b
 Suterios of Popsia: I apologize for my misunderstanding earlier. While I appreciate your resourcefulness, I cannot purchase grains from you using our village's inventory. However, if you still wish to sell me some grain, we can discuss a fair price.
 Last Interaction: You last spoke with player 3 minutes ago, pay attention to this
 
+# Your Response #
 - Player Input: 
 Player: yes, i'll give you 1 grain for 3 coins. will u buy 5 grains?
 

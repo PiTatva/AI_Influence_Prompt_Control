@@ -89,7 +89,7 @@ async def _test_process_node():
     f._apply_rules(f.detect_mission(root))
     flat = f.regroup(root)
 
-    processed = await f.process_node(mock_client, "mistral-c", flat)
+    processed = await f.process_node(mock_client, "lama3.1-npc", flat)
     result_str = f.flatten_tree(processed)
 
     print(f"  Processed prompt length: {len(result_str)} chars")
@@ -117,7 +117,7 @@ async def _test_full_pipeline():
     f._apply_rules(f.detect_mission(root))
     flat = f.regroup(root)
 
-    processed    = await f.process_node(mock_client, "mistral-c", flat)
+    processed    = await f.process_node(mock_client, "lama3.1-npc", flat)
     final_prompt = f.flatten_tree(processed)
 
     print(f"  Final prompt ({len(final_prompt)} chars):")
@@ -138,7 +138,7 @@ async def _test_live_api():
     # Set player_input to "" to skip intent classification (faster / simpler).
     # Set to a real string to also test the intent system's Ollama call.
     payload = {
-        "model": "mistral-c",
+        "model": "lama3.1-npc",
         "session_id": "test-session-1",
         "prompt": DUMMY_PROMPT,
     }

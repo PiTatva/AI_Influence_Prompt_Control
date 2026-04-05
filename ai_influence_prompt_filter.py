@@ -21,6 +21,7 @@ import importlib
 import traceback
 from typing import Optional
 from intent_system import IntentSystem
+from context_resolver import ContextAnalyzer
 
 app = FastAPI()
 
@@ -32,7 +33,7 @@ async def _debug_exception_handler(request: Request, exc: Exception):
     return JSONResponse(status_code=500, content={"error": str(exc), "traceback": tb})
 
 OLLAMA_URL    = "http://localhost:11434/api/generate"
-DEFAULT_MODEL = "mistral"
+DEFAULT_MODEL = "lama3.1-npc"
 TOTAL_BUDGET  = 60000   # hard character cap on the final combined prompt
 LOGGING       = True    # write diagnostic logs to log_{mission}.txt
 
@@ -91,7 +92,8 @@ _MISSION_TO_CONFIG: dict[str, str] = {
 
 # These globals are set by _apply_rules() on every request.
 # Declared here so the rest of the module can reference them before the first call.
-ENABLE_INTENT_SYSTEM:   bool             = False   # overridden per config
+ENABLE_INTENT_SYSTEM:    bool             = False   # overridden per config
+ENABLE_CONTEXT_ANALYSIS: bool             = False   # overridden per config
 SECTIONS_TO_REMOVE:     list[str]        = []
 SECTIONS_TO_REPLACE:    dict[str, str]   = {}
 SECTIONS_TO_SUMMARIZE:  dict[str, dict]  = {}
@@ -119,12 +121,13 @@ def detect_mission(root: "Section") -> Optional[str]:  # type: ignore[name-defin
 
 def _reset_rules() -> None:
     """Reset all section-rule globals to empty defaults (pass-through — no processing)."""
-    global ENABLE_INTENT_SYSTEM
+    global ENABLE_INTENT_SYSTEM, ENABLE_CONTEXT_ANALYSIS
     global SECTIONS_TO_REMOVE, SECTIONS_TO_REPLACE, SECTIONS_TO_SUMMARIZE
     global SECTION_ORDER_PRIORITY, ORDER_DEFAULT_PRIORITY
     global BULLETS_TO_KEEP, BULLETS_TO_REMOVE
     global PINNED_STATIC_SECTIONS, DYNAMIC_SECTIONS, HEADER_GROUPS
-    ENABLE_INTENT_SYSTEM   = False
+    ENABLE_INTENT_SYSTEM    = False
+    ENABLE_CONTEXT_ANALYSIS = False
     SECTIONS_TO_REMOVE     = []
     SECTIONS_TO_REPLACE    = {}
     SECTIONS_TO_SUMMARIZE  = {}
@@ -139,7 +142,7 @@ def _reset_rules() -> None:
 
 def _apply_rules(module_name: str) -> None:
     """Load a config_*.py module and rebind all section-rule globals (normalized)."""
-    global ENABLE_INTENT_SYSTEM
+    global ENABLE_INTENT_SYSTEM, ENABLE_CONTEXT_ANALYSIS
     global SECTIONS_TO_REMOVE, SECTIONS_TO_REPLACE, SECTIONS_TO_SUMMARIZE
     global SECTION_ORDER_PRIORITY, ORDER_DEFAULT_PRIORITY
     global BULLETS_TO_KEEP, BULLETS_TO_REMOVE
@@ -148,7 +151,8 @@ def _apply_rules(module_name: str) -> None:
     m = importlib.import_module(module_name)
     # Reload the module each time so edits to config_*.py take effect without restart.
     importlib.reload(m)
-    ENABLE_INTENT_SYSTEM   = getattr(m, "ENABLE_INTENT_SYSTEM", True)
+    ENABLE_INTENT_SYSTEM    = getattr(m, "ENABLE_INTENT_SYSTEM",    True)
+    ENABLE_CONTEXT_ANALYSIS = getattr(m, "ENABLE_CONTEXT_ANALYSIS", False)
     SECTIONS_TO_REMOVE     = [_norm_header(h) for h in m.SECTIONS_TO_REMOVE]
     SECTIONS_TO_REPLACE    = {_norm_header(k): v for k, v in m.SECTIONS_TO_REPLACE.items()}
     SECTIONS_TO_SUMMARIZE  = {_norm_header(k): v for k, v in m.SECTIONS_TO_SUMMARIZE.items()}
@@ -166,7 +170,8 @@ def _apply_rules(module_name: str) -> None:
 _apply_rules("config_dialogue")
 
 # Intent system — loaded from intent_config.json
-_intent_system = IntentSystem("intent_config.json")
+_intent_system    = IntentSystem("intent_config.json")
+_context_analyzer = ContextAnalyzer("intent_config.json")
 
 
 def _find_in_list(header_norm: str, lst: list) -> bool:
@@ -727,9 +732,43 @@ async def _run_pipeline(
         _reset_rules()
 
     # ── Intent-based section filtering ────────────────────────────────────
-    if ENABLE_INTENT_SYSTEM and player_input:
+    _context_block: Optional[str] = None
+
+    if ENABLE_CONTEXT_ANALYSIS and player_input:
+        # Pass 1: heavy analysis — intent + context + entities from conversation
         async with httpx.AsyncClient() as client:
-            intent_data     = await _intent_system.extract(client, model, player_input)
+            analysis = await _context_analyzer.analyze(client, model, root, player_input)
+        _log(f"[Pass1] {json.dumps(analysis, ensure_ascii=False)}")
+
+        # Code layer: programmatic entity → ID resolution
+        resolved  = _context_analyzer.resolve_entities(
+            analysis.get("entities", {}), root
+        )
+        _log(f"[Pass1] resolved: {resolved}")
+
+        # Build the compact context block that replaces History + Immediate Situation
+        _context_block = _context_analyzer.build_context_block(analysis, resolved)
+
+        # Reuse existing intent-to-header/bullet config with Pass 1's intent
+        intent_data_compat = {
+            "intents":   [{"type": analysis.get("intent", "greet"), "score": 1.0}],
+            "entities":  {},
+            "locations": [],
+        }
+        top_intents     = _intent_system.select(intent_data_compat)
+        allowed_headers = _intent_system.resolve_headers(top_intents)
+        bullet_filters  = _intent_system.resolve_bullets(top_intents)
+        root = filter_tree_by_intents(
+            root, allowed_headers, bullet_filters,
+            include_unmatched=_intent_system.include_unmatched,
+            always_included=_intent_system.always_headers_norm,
+        )
+        _log(", ".join(child.header for child in root.children))
+
+    elif ENABLE_INTENT_SYSTEM and player_input:
+        # Fallback: lightweight single-line intent classifier (no context)
+        async with httpx.AsyncClient() as client:
+            intent_data = await _intent_system.extract(client, model, player_input)
         _log(f"  Detected intents: {intent_data}")
         top_intents     = _intent_system.select(intent_data)
         allowed_headers = _intent_system.resolve_headers(top_intents)
@@ -767,6 +806,18 @@ async def _run_pipeline(
     static_root.children = static_children
     dynamic_root          = Section(header="__root__", level=0, content="")
     dynamic_root.children = dynamic_children
+
+    # ── If Pass 1 ran: strip sections it consumed and inject context block ─
+    if _context_block:
+        _pass1_strip = {"conversation history", "immediate situation"}
+        dynamic_root.children = [
+            c for c in dynamic_root.children
+            if not any(kw in _norm_header(c.header) for kw in _pass1_strip)
+        ]
+        ctx_node = Section(header="# Context Analysis", level=1, content=_context_block)
+        dynamic_root.children.append(ctx_node)
+        _log(f"[Pass1] Injected context block ({len(_context_block)} chars), "
+             f"stripped: {_pass1_strip}")
 
     static_prompt  = flatten_tree(static_root) [:int(TOTAL_BUDGET * 0.75)]
     dynamic_prompt = flatten_tree(dynamic_root)[:TOTAL_BUDGET - len(static_prompt)]

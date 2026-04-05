@@ -47,6 +47,10 @@
     },
     "workshop": {
       "Character Briefing": ["Identity|Workshops|Culture|Wealth|Your Relationship|Relationships|Known Information|Trust"]
+    },
+    "trade": {
+      "Character Briefing": ["Identity|Culture|Wealth|Your Relationship|Relationships"],
+      "The Player": ["Your Knowledge|Wealth"]
     }
     
   },
@@ -63,5 +67,17 @@
   "threshold": 0.4,
   "max_intents": 2,
   "max_tokens": 300,
-  "include_unmatched_sections": false
+  "include_unmatched_sections": false,
+
+  "pass1_history_messages": 6,
+  "pass1_max_tokens": 600,
+
+  "intent_to_resolution_sections": {
+    "trade":                ["Character Briefing", "The Player", "Item Exchange"],
+    "parley":               ["Character Briefing", "Global Politics", "Conflict", "Kingdom Actions"],
+    "kingdom_action":       ["Kingdom Actions", "Global Politics", "Conflict"],
+    "hire_mercenary":       ["Nearby Parties", "Kingdom Actions"],
+    "recruit_troops":       ["Nearby Parties", "Nearby Settlements"],
+    "prisoner_interaction": ["Action System", "Character Briefing"]
+  }
 }
